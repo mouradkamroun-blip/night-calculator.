@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>حساب مدة الليل</title>
+  <style>
+    body {
+      font-family: "Tahoma", sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      direction: rtl;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: auto;
+      text-align: center;
+    }
+    h1 { color: #333; }
+    input, button {
+      width: 90%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { background: #45a049; }
+    .toggle-btn { background: #1976d2; }
+    .toggle-btn.off { background: #d32f2f; }
+    .reset-btn { background: #f44336; }
+    .date-btn { background: #9c27b0; }
+    .result {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #222;
+      text-align: right;
+    }
+    .highlight { color: #d32f2f; font-weight: bold; }
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-top: 20px;
+      font-size: 14px;
+      background: #e0e0e0;
+      padding: 10px 15px;
+      border-radius: 10px;
+      gap: 6px;
+    }
+    .countdown {
+      margin-top: 10px;
+      font-size: 16px;
+      color: #1976d2;
+      font-weight: bold;
+      text-align: center;
+    }
+    .flash {
+      animation: flash 1s infinite alternate;
+      color: #d32f2f;
+      font-weight: bold;
+    }
+    @keyframes flash {
+      from { opacity: 1; transform: scale(1); }
+      to   { opacity: 0.3; transform: scale(1.2); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1> آخر وقت لصلاة العشاء </h1>
+    <h1>⏰⏰⏰</h1>
+    <h1>و وقت الثلث الأخير من الليل</h1>
+
+    <!-- إدخال التاريخ + الوقت -->
+    <label>🌇 أدخل وقت الغروب:</label>
+    <input type="date" id="sunsetDate">
+    <input type="time" id="sunset">
+
+    <label>🌅 أدخل وقت الفجر {وقت إقامة الصلاة وليس الآذان}:</label>
+    <input type="date" id="fajrDate">
+    <input type="time" id="fajr">
+
+    <button class="date-btn" onclick="useToday()">📅 استخدام تاريخ اليوم</button>
+    <button onclick="calculateNight()">احسب</button>
+    <button id="toggleBtn" class="toggle-btn" onclick="toggleNotifications()">🔔 التنبيهات: تشغيل</button>
+    <button class="reset-btn" onclick="resetData()">🗑️ مسح البيانات</button>
+
+    <div id="result" class="result"></div>
+    <div id="countdowns"></div>
+  </div>
+
+  <audio id="notifySound" src="https://www.soundjay.com/buttons/sounds/button-16.mp3" preload="auto"></audio>
+
+  <script>
+    let notificationsEnabled = true;
+    let countdownInterval;
+
+    // حالات منع التكرار
+    let alertedHalfNight = false;
+    let alertedLastThird = false;
+    let alertedFajr = false;
+
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+
+    window.onload = function () {
+      const savedSunset = localStorage.getItem("sunset");
+      const savedFajr = localStorage.getItem("fajr");
+      const savedNotif = localStorage.getItem("notificationsEnabled");
+
+      if (savedSunset) {
+        const s = new Date(savedSunset);
+        document.getElementById("sunsetDate").value = s.toISOString().split("T")[0];
+        document.getElementById("sunset").value = s.toTimeString().slice(0,5);
+      }
+      if (savedFajr) {
+        const f = new Date(savedFajr);
+        document.getElementById("fajrDate").value = f.toISOString().split("T")[0];
+        document.getElementById("fajr").value = f.toTimeString().slice(0,5);
+      }
+      if (savedNotif !== null) {
+        notificationsEnabled = savedNotif === "true";
+        updateToggleBtn();
+      }
+    };
+
+    function resetData() {
+      localStorage.clear();
+      document.getElementById("sunsetDate").value = "";
+      document.getElementById("sunset").value = "";
+      document.getElementById("fajrDate").value = "";
+      document.getElementById("fajr").value = "";
+      document.getElementById("result").innerHTML = "";
+      document.getElementById("countdowns").innerHTML = "";
+      clearInterval(countdownInterval);
+    }
+
+    function useToday() {
+      const today = new Date().toISOString().split("T")[0];
+      document.getElementById("sunsetDate").value = today;
+      document.getElementById("fajrDate").value = today;
+    }
+
+    function updateToggleBtn() {
+      const btn = document.getElementById("toggleBtn");
+      btn.textContent = notificationsEnabled ? "🔔 التنبيهات: تشغيل" : "🔕 التنبيهات: إيقاف";
+      btn.classList.toggle("off", !notificationsEnabled);
+    }
+
+    function toggleNotifications() {
+      notificationsEnabled = !notificationsEnabled;
+      localStorage.setItem("notificationsEnabled", notificationsEnabled);
+      updateToggleBtn();
+    }
+
+    function scheduleNotification(date, message) {
+      const now = new Date();
+      const delay = date - now;
+      if (notificationsEnabled && delay > 0) {
+        setTimeout(() => {
+          if (Notification.permission === "granted") {
+            new Notification(message);
+            document.getElementById("notifySound").play();
+          }
+        }, delay);
+      }
+    }
+
+    function formatTimeWithDate(date) {
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) +
+             ` - ${date.toLocaleDateString('en-GB')}`;
+    }
+
+    function formatCountdown(ms) {
+      if (ms <= 0) return "00:00:00";
+      const h = Math.floor(ms / (1000 * 60 * 60));
+      const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((ms % (1000 * 60)) / 1000);
+      return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
+    }
+
+    function calculateNight() {
+      clearInterval(countdownInterval);
+
+      const sunsetDateStr = document.getElementById("sunsetDate").value;
+      const sunsetStr = document.getElementById("sunset").value;
+      const fajrDateStr = document.getElementById("fajrDate").value;
+      const fajrStr = document.getElementById("fajr").value;
+      const resultDiv = document.getElementById("result");
+      const countdownsDiv = document.getElementById("countdowns");
+
+      if (!sunsetDateStr || !sunsetStr || !fajrDateStr || !fajrStr) {
+        resultDiv.innerHTML = "⚠️ يرجى إدخال التاريخ والوقت معًا.";
+        return;
+      }
+
+      const sunset = new Date(`${sunsetDateStr}T${sunsetStr}:00`);
+      const fajr = new Date(`${fajrDateStr}T${fajrStr}:00`);
+
+      localStorage.setItem("sunset", sunset);
+      localStorage.setItem("fajr", fajr);
+
+      if (fajr <= sunset) fajr.setDate(fajr.getDate() + 1);
+
+      const nightDuration = fajr - sunset;
+      const halfNight = new Date(sunset.getTime() + nightDuration / 2);
+      const lastThird = new Date(fajr.getTime() - nightDuration / 3);
+      const halfNightReminder = new Date(halfNight.getTime() - 15 * 60 * 1000);
+
+      const hours = Math.floor(nightDuration / (1000 * 60 * 60));
+      const minutes = Math.floor((nightDuration % (1000 * 60 * 60)) / (1000 * 60));
+
+      const now = new Date();
+      let statusMsg = now >= lastThird && now <= fajr
+        ? `<p class="highlight">✅ الوقت الحالي في الثلث الأخير من الليل</p>`
+        : `<p>الوقت الحالي ليس في الثلث الأخير من الليل</p>`;
+
+      resultDiv.innerHTML = `
+     
+
+        <div class="timeline">
+          <p>🌇 الغروب: ${formatTimeWithDate(sunset)}</p>
+          <p>⏳ مدة الليل: ${hours} ساعة و ${minutes} دقيقة</p>
+          <p>🕌 خروج وقت صلاة العشاء {نصف الليل}: ${formatTimeWithDate(halfNight)}</p>
+          <p>🌙 دخول وقت الثلث الأخير من الليل: ${formatTimeWithDate(lastThird)}</p>
+          <p>🌅 الفجر {الإقامة}: ${formatTimeWithDate(fajr)}</p>
+        </div>
+      `;
+
+      function updateCountdowns() {
+        const now = new Date();
+        const toHalfNight = halfNight - now;
+        const toLastThird = lastThird - now;
+        const toFajr = fajr - now;
+
+        if (toHalfNight <= 0 && !alertedHalfNight) {
+          document.getElementById("notifySound").play();
+          if (Notification.permission === "granted") {
+            new Notification("⏰ انتهى وقت صلاة العشاء");
+          }
+          alertedHalfNight = true;
+        }
+
+        if (toLastThird <= 0 && !alertedLastThird) {
+          document.getElementById("notifySound").play();
+          if (Notification.permission === "granted") {
+            new Notification("🌙 بدأ وقت الثلث الأخير من الليل");
+          }
+          alertedLastThird = true;
+        }
+
+        if (toFajr <= 0 && !alertedFajr) {
+          document.getElementById("notifySound").play();
+          if (Notification.permission === "granted") {
+            new Notification("🌅 حان وقت الفجر (إقامة الصلاة)");
+          }
+          alertedFajr = true;
+        }
+
+        countdownsDiv.innerHTML = `
+          <div class="countdown ${toHalfNight <= 0 ? "flash" : ""}">
+            ⏰ الوقت المتبقي لخروج وقت صلاة العشاء: ${formatCountdown(toHalfNight)}
+          </div>
+          <div class="countdown ${toLastThird <= 0 ? "flash" : ""}">
+            🌙 الوقت المتبقي لبداية الثلث الأخير من الليل : ${formatCountdown(toLastThird)}
+          </div>
+          <div class="countdown ${toFajr <= 0 ? "flash" : ""}">
+            🌅 الوقت المتبقي للفجر {إقامة الصلاة}: ${formatCountdown(toFajr)}
+          </div>
+        `;
+      }
+      updateCountdowns();
+      countdownInterval = setInterval(updateCountdowns, 1000);
+
+      if (notificationsEnabled) {
+        scheduleNotification(halfNightReminder, "🕌 بعد ربع ساعة يخرج وقت صلاة العشاء");
+        scheduleNotification(lastThird, "🌙 دخل وقت الثلث الأخير من الليل");
+      }
+    }
+  </script>
+</body>
+</html>

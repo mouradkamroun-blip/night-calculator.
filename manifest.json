@@ -1,0 +1,21 @@
+{
+  "name": "حساب مدة الليل",
+  "short_name": "مدة الليل",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#4CAF50",
+  "description": "حساب نصف الليل والثلث الأخير وأوقات العشاء والفجر",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
